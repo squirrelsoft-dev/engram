@@ -4,3 +4,10 @@
 .pi/
 history.txt
 skills-lock.json
+
+# Rust build artifacts
+/target/
+**/target/
+
+# SurrealKV local data directories the binary creates
+surrealkv:/

@@ -1,0 +1,49 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/engram-storage",
+    "crates/engram",
+]
+# The schema-migration parity spike (spikes/schema-migrations) is
+# a standalone Rust crate from before the workspace existed; it
+# has its own `Cargo.lock` and `target/` and intentionally does
+# not share dependencies with the Engram crate. We exclude it so
+# cargo doesn't try to fold it into the workspace build.
+exclude = [
+    "spikes",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/squirrelsoft-dev/engram"
+
+[workspace.dependencies]
+# SurrealDB pinned to 3.1.x to match the parity-spike findings and the
+# 3.0 minimum we commit to in docs/design/schema-migrations.md §6.
+surrealdb = { version = "3.1", default-features = false, features = [
+    "kv-mem",
+    "kv-surrealkv",
+    "protocol-http",
+    "rustls",
+] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+sha2 = "0.10"
+hex = "0.4"
+toml = "0.8"
+async-trait = "0.1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4", features = ["derive", "env"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

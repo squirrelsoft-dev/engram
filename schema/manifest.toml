@@ -45,10 +45,12 @@ engram_version_min = "0.1.0"
 # says "this version of the manifest expects these migrations to be on
 # disk and applied in this order." A mismatch on startup means the
 # migrations directory is out of sync with the manifest.
-applied_migrations = [
-  {
-    version = 1,
-    file = "0001_init.sql",
-    description = "Initial schema: engram_schema ledger, Episode, Entity, Concept, Preference, Procedure, Task record types, all graph edges, tenant/lookup/vector indexes.",
-  },
-]
+#
+# Note: written in array-of-tables form rather than inline-table form
+# because the `toml` crate (0.8.x, pinned via Cargo.lock) does not
+# accept trailing commas in inline tables. Both forms are valid TOML.
+
+[[applied_migrations]]
+version = 1
+file = "0001_init.sql"
+description = "Initial schema: engram_schema ledger, Episode, Entity, Concept, Preference, Procedure, Task record types, all graph edges, tenant/lookup/vector indexes."
