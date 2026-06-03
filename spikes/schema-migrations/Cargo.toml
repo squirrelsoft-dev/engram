@@ -1,0 +1,17 @@
+[package]
+name = "engram-spike"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+surrealdb = { version = "3.1", features = ["kv-mem", "kv-surrealkv", "protocol-ws", "protocol-http", "rustls"] }
+tokio = { version = "1", features = ["full"] }
+serde_json = "1"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+sha2 = "0.10"
+hex = "0.4"
+
+[[bin]]
+name = "engram-spike"
+path = "src/main.rs"

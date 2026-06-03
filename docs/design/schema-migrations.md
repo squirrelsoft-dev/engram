@@ -76,11 +76,21 @@ service adapter.
   inside SurrealDB, which is good — but it constrains our migration
   options: an `ASSERT` that a new field would violate cannot be
   retroactively checked against existing rows.
-- **`INFO FOR DB` / `INFO FOR TABLE`.** Since v3.0, this returns a
-  reconstructable value: the output is the exact SurrealQL that
-  defines each resource. Two `INFO FOR DB` snapshots can be `diff()`ed
-  to produce a list of changes. **This is the foundation of our
-  change detection** — we don't need to invent a diff format.
+- **`INFO FOR DB` and `INFO FOR TABLE <name>`.** Since v3.0, these
+  return reconstructable values: the output is the exact SurrealQL
+  that defines each resource. Two snapshots can be `diff()`ed to
+  produce a list of changes. **This is the foundation of our change
+  detection** — we don't need to invent a diff format. **However:**
+  `INFO FOR DB` is a *top-level summary only*; it returns an object
+  like `{ tables, users, params, analyzers, ... }` where each entry
+  is a map from name to a `DEFINE ...` string for that resource
+  type. **Field and index definitions for each table are NOT in
+  that top-level output** — they live under `INFO FOR TABLE <name>`,
+  which returns a structured object with `events`, `fields`,
+  `indexes`, `lives`, and `tables` keys, each a map from name to
+  `DEFINE ...` string. A migration framework that wants to detect
+  drift must query both. This is verified by the spike in
+  `spikes/schema-migrations/`; see §5.7.
 - **`SHOW CHANGES FOR TABLE ... SINCE <versionstamp>`.** With a
   `CHANGEFEED` enabled, we can read the historical mutation stream
   for a table. Useful for our own migration audit log.
@@ -307,6 +317,31 @@ becomes a convention enforced in code review.
   the metadata record to support a future rollback tool, but writing
   the down-migration is the responsibility of whoever writes the up
   migration, and the runner does not assume one exists.
+
+## 5.7 Spike verification
+
+The core assumption of this design — that the same `.surql` file
+produces the same internal schema state whether applied in
+embedded or service mode — is empirically verified by the spike
+in `spikes/schema-migrations/`. As of 2026-06-03:
+
+- A 22-field, 4-index, 4-table schema applied in both modes
+  produces identical `INFO FOR DB` and `INFO FOR TABLE` output
+  after normalization.
+- All `ASSERT` constraints, `INSIDE [...]` enum constraints,
+  `DEFAULT` values, and `option<>` types round-trip identically.
+- The spike uses the actual SurrealDB 3.1.3 crate and binary (matched
+  versions) on both sides.
+
+This unblocks the schema work in #1.
+
+The spike also surfaced a transport-level issue: the SurrealDB Rust
+crate's WebSocket client hits a protocol-compat deadlock against
+the spawned `surreal` binary on version 3.1.3, even though the
+`surreal sql` CLI over the same URL works fine. HTTP works. The
+spike uses HTTP for the service-side test. This does not affect
+the design but should be tracked separately if WS service mode
+becomes important.
 
 ## 6. SurrealDB version pinning
 

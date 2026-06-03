@@ -1,2 +1,6 @@
 .omc/
 .DS_Store
+.agents/
+.pi/
+history.txt
+skills-lock.json
