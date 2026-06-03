@@ -27,8 +27,11 @@ that the assumption holds with the actual SurrealDB 3.1.3 stack.
 # Install the matching surreal binary (3.1.3 is what the spike targets)
 curl -sSf https://install.surrealdb.com | sh
 
-# Build and run
-cargo run -- schema.sql
+# Build and run against the Engram initial schema
+cargo run -- ../../schema/migrations/0001_init.sql
+
+# Or against any other .surql file
+cargo run -- path/to/schema.sql
 ```
 
 The schema file path is the only required argument. `--surreal <path>`
@@ -48,8 +51,9 @@ and exits non-zero.
 ## Findings (2026-06-03)
 
 1. **Parity confirmed.** The same `.surql` applied in both modes
-   produces identical normalized output (verified with a 22-field +
-   4-index subset of the Engram schema).
+   produces identical normalized output for the Engram initial schema
+   in `schema/migrations/0001_init.sql` (123 DEFINE statements, 14
+   tables, 14 indexes, 3 vector indexes).
 
 2. **`INFO FOR DB` is a top-level summary only.** In SurrealDB 3.1.3,
    `INFO FOR DB` returns an object like
@@ -89,6 +93,19 @@ and exits non-zero.
   schema. The 3.0 release notes mention a new behavior where
   `SCHEMAFULL` + extra undeclared fields returns an error rather
   than silently filtering.
+
+- `FLEXIBLE TYPE object` (or `TYPE object FLEXIBLE` — both parse)
+  declares a flexible key-value store on a `SCHEMAFULL` table. The
+  field cannot be `NONE`, so a `DEFAULT {}` is required to make the
+  field optional-from-the-caller's-perspective while still accepting
+  any nested object shape.
+
+- `HNSW DIMENSION ...` requires a literal integer at define time; the
+  dimension cannot be parameterised with `DEFINE PARAM $dim`. The
+  schema keeps `$embedding_dim` as a runtime-readable parameter and
+  hardcodes the same value as a literal in the three vector indexes.
+  Changing the embedding model requires a follow-up migration that
+  drops and recreates the affected indexes.
 
 - The `engram_schema` table itself needs to be declared in the same
   migration that uses it. The schema bootstrap (migration 0001) must

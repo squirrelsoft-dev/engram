@@ -1,0 +1,54 @@
+# Engram schema manifest
+#
+# This file is the source of truth for the current schema version. The
+# migration runner reads it to determine which migrations from
+# schema/migrations/ still need to be applied.
+#
+# The schema-migrations design (docs/design/schema-migrations.md §3.1)
+# establishes the directory layout:
+#
+#     schema/
+#       migrations/
+#         0001_init.sql
+#         0002_*.sql
+#         ...
+#       manifest.toml         # this file
+#
+# `version` is the highest applied migration number. The runner compares
+# it against the highest migration number on disk to determine work to do.
+#
+# `engram_version_min` is the minimum Engram release required to apply
+# the migrations in this manifest. The runner refuses to start if the
+# running Engram is older. This lets a deployment surface a clear error
+# instead of crashing on an incompatible `DEFINE`.
+#
+# `applied_migrations` records which migrations have been applied and
+# what checksum they were applied with. The runner validates checksums
+# on startup per docs/design/schema-migrations.md §4.3 and fails fast
+# on mismatch.
+#
+# Per docs/design/schema-migrations.md §9 (open question 3), schema
+# version and Engram version are decoupled: a single Engram release can
+# ship multiple schema versions, and a schema bump does not require a
+# new Engram release.
+
+version = 1
+
+# Minimum Engram version that can apply this manifest. Bumped when a
+# migration requires Engram runtime features (e.g. a new API in the
+# MemoryStore interface, or a new consolidation-engine capability).
+engram_version_min = "0.1.0"
+
+# Currently applied migrations. Each entry mirrors a row in the
+# `engram_schema` table once the runner has applied it. The runner is
+# the only writer of these records; the manifest is a static file that
+# says "this version of the manifest expects these migrations to be on
+# disk and applied in this order." A mismatch on startup means the
+# migrations directory is out of sync with the manifest.
+applied_migrations = [
+  {
+    version = 1,
+    file = "0001_init.sql",
+    description = "Initial schema: engram_schema ledger, Episode, Entity, Concept, Preference, Procedure, Task record types, all graph edges, tenant/lookup/vector indexes.",
+  },
+]
