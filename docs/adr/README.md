@@ -6,6 +6,12 @@ architectural decision, its context, and its consequences.
 ADRs are immutable once accepted. Superseding decisions go in a new ADR that
 links back to the one it replaces.
 
+## Other design documents
+
+Longer-form, forward-looking design specs live in [`../design/`](../design/).
+They cover areas that are too large for a single decision record (e.g.
+[the schema migration strategy](../design/schema-migrations.md)).
+
 ## Index
 
 | Number | Title | Status |
