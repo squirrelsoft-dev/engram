@@ -1,0 +1,83 @@
+# GitHub Actions CI for the Engram workspace.
+#
+# Mirrors the verification checklist from the Phase 1
+# issue handoff: format check, clippy with -D warnings, the
+# full test suite, and a build of the `engram` binary. The
+# workflow runs on every push and pull request against the
+# `main` branch.
+#
+# The SurrealDB / Rust toolchain is pinned via `rust-toolchain.toml`
+# in the repo root (when it lands) and via the channel
+# below; the workspace compiles cleanly against the pinned
+# SurrealDB 3.1.x line. Bump the channel alongside a
+# toolchain change.
+#
+# Cargo's incremental cache is keyed by the workspace's
+# `Cargo.lock`, which is committed per the repository's
+# policy. The actions/cache step uses that lock file as
+# the cache key so a clean clone gets a cold cache and
+# subsequent runs share the same dependency graph.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  RUST_BACKTRACE: short
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.85
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        # -D warnings turns the lint warnings into hard errors
+        # so a future regression is caught on the PR rather
+        # than in a downstream build.
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Build
+        # Build before running tests so a compilation
+        # failure surfaces with a clearer error in CI.
+        run: cargo build --workspace
+
+      - name: Test
+        # The full workspace test suite, including the
+        # 21 storage-adapter tests, the 5 integration
+        # tests, the 3 migration-runner tests, and the 9
+        # unit tests in the storage crate.
+        run: cargo test --workspace
+
+      - name: Build release binary
+        # Verify the release build still links, so a
+        # release-only flag in the workspace doesn't slip
+        # past CI.
+        run: cargo build --release -p engram

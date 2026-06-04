@@ -16,7 +16,24 @@ pub use config::{MemoryStoreConfig, StoreKind};
 pub use embedded::EmbeddedStore;
 pub use service::ServiceStore;
 pub use shared::with_ns_db;
-pub use store::MemoryStore;
+pub use store::{GraphFilters, MemoryStore};
+
+/// Format a `RecordIdKey` for inline use in query strings
+/// (e.g. `<table>:<key>`). `RecordIdKey` doesn't implement
+/// `Display`, so we unwrap its variants explicitly. Mirrors
+/// the helper in the embedded adapter so the two paths
+/// produce identical query strings.
+pub fn format_record_id_key(key: &surrealdb::types::RecordIdKey) -> String {
+    use surrealdb::types::RecordIdKey;
+    match key {
+        RecordIdKey::String(s) => s.clone(),
+        RecordIdKey::Number(n) => n.to_string(),
+        RecordIdKey::Uuid(u) => u.to_string(),
+        RecordIdKey::Array(_) | RecordIdKey::Object(_) | RecordIdKey::Range(_) => {
+            format!("{key:?}")
+        }
+    }
+}
 
 use crate::error::Error;
 use std::path::Path;

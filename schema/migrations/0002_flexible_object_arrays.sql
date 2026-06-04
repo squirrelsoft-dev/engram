@@ -1,0 +1,34 @@
+-- Migration 0002: relax `disambiguation_log` so its array
+-- elements can hold arbitrary objects.
+--
+-- Migration 0001 declared `disambiguation_log` on the
+-- `entity` table as `option<array<object>>`. The `object`
+-- type, when not `FLEXIBLE`, validates each element
+-- against the table's defined fields, which means
+-- callers can't write arbitrary log entries (e.g.
+-- `{"step": "exact-name match"}`). The disambiguation
+-- log is by design a journal of resolution events, not a
+-- structured record, so the field should accept any
+-- object.
+--
+-- SurrealDB 3.1.x has parser quirks that affect the
+-- `array<object FLEXIBLE>` form (the `FLEXIBLE` modifier
+-- is applied to the array itself rather than the element
+-- type, leaving the elements typed as bare `object` —
+-- see surrealdb/surrealdb #6606). The
+-- `FLEXIBLE TYPE array<object>` outer form also does
+-- not propagate to the array elements in 3.1.x. The
+-- working fix is to define the array element type
+-- explicitly with `.*` and mark *that* field as
+-- `FLEXIBLE`.
+--
+-- If a future field uses the same pattern (an
+-- `array<object>` whose elements the application wants
+-- to fill with arbitrary data), declare it as
+-- `FLEXIBLE TYPE array<object FLEXIBLE>` directly in
+-- 0001 and not need a follow-up migration. (The 3.1.x
+-- bug in #6606 is a known issue; once fixed upstream,
+-- both forms will work.)
+
+DEFINE FIELD OVERWRITE disambiguation_log ON entity TYPE option<array>;
+DEFINE FIELD OVERWRITE disambiguation_log.* ON entity TYPE object FLEXIBLE;

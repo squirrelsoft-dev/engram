@@ -32,7 +32,7 @@
 # ship multiple schema versions, and a schema bump does not require a
 # new Engram release.
 
-version = 1
+version = 3
 
 # Minimum Engram version that can apply this manifest. Bumped when a
 # migration requires Engram runtime features (e.g. a new API in the
@@ -54,3 +54,13 @@ engram_version_min = "0.1.0"
 version = 1
 file = "0001_init.sql"
 description = "Initial schema: engram_schema ledger, Episode, Entity, Concept, Preference, Procedure, Task record types, all graph edges, tenant/lookup/vector indexes."
+
+[[applied_migrations]]
+version = 2
+file = "0002_flexible_object_arrays.sql"
+description = "Relax `entity.disambiguation_log` to a flexible array of objects so the disambiguation log can hold arbitrary per-event objects. The 0001 form (`option<array<object>>`) validated each element against the entity table's defined fields, which is over-strict for an event log."
+
+[[applied_migrations]]
+version = 3
+file = "0003_normalise_graph_weight.sql"
+description = "Normalise graph-edge attribute name to a single `weight: float [0.0, 1.0]` on every relation table. The 0001 schema used per-relation names (`confidence`, `strength`) that the Phase 1 `relate_nodes(weight: Option<f32>)` API and the `GraphResult.attributes` shape cannot represent uniformly."

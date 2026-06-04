@@ -75,6 +75,16 @@ pub enum Error {
     #[error("storage i/o: {0}")]
     Io(#[from] std::io::Error),
 
+    /// Catch-all for JSON serialisation issues in the
+    /// record-to-map helpers. `serde_json` is used to
+    /// shape the `CONTENT` payload sent to SurrealDB so
+    /// schema-level `ASSERT`s fire on the server; an error
+    /// here is a programming bug (the input record carries a
+    /// value that cannot be serialised), not a runtime
+    /// condition the caller can recover from.
+    #[error("storage json: {0}")]
+    Json(#[from] serde_json::Error),
+
     /// Catch-all for unexpected backend behaviour that the migration
     /// runner's invariants do not cover.
     #[error("storage error: {0}")]

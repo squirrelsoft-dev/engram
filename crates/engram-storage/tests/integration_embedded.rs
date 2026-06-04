@@ -26,11 +26,17 @@ fn manifest_path() -> PathBuf {
     p
 }
 
+/// The schema version the canonical manifest declares after
+/// the 0001-0003 migrations that ship with Phase 1 land.
+/// Bump this literal alongside any new migration.
+const EXPECTED_SCHEMA_VERSION: u32 = 3;
+
 #[tokio::test]
 async fn embedded_migration_runner_applies_canonical_schema() {
+    let unique = format!("engram_test_{}", uuid::Uuid::new_v4().simple());
     let config = MemoryStoreConfig::new(
         "0.1.0-test",
-        "engram_test",
+        unique,
         "main",
         manifest_path(),
         StoreKind::Embedded { path: None },
@@ -38,14 +44,18 @@ async fn embedded_migration_runner_applies_canonical_schema() {
 
     let store = open(&config).await.expect("opening embedded store");
     let version = store.schema_version().await.expect("schema version");
-    assert_eq!(version, 1, "after first run, schema_version should be 1");
+    assert_eq!(
+        version, EXPECTED_SCHEMA_VERSION,
+        "after first run, schema_version should equal the manifest version"
+    );
 }
 
 #[tokio::test]
 async fn embedded_migration_runner_is_idempotent() {
+    let unique = format!("engram_test_{}", uuid::Uuid::new_v4().simple());
     let config = MemoryStoreConfig::new(
         "0.1.0-test",
-        "engram_test",
+        unique,
         "main",
         manifest_path(),
         StoreKind::Embedded { path: None },
@@ -54,7 +64,7 @@ async fn embedded_migration_runner_is_idempotent() {
     // First open applies the migration.
     let store = open(&config).await.expect("first open");
     let v1 = store.schema_version().await.expect("v1");
-    assert_eq!(v1, 1);
+    assert_eq!(v1, EXPECTED_SCHEMA_VERSION);
 
     // Drop the store and re-open. The migration runner should
     // see the existing ledger row and skip.
@@ -62,28 +72,35 @@ async fn embedded_migration_runner_is_idempotent() {
 
     let store = open(&config).await.expect("second open");
     let v2 = store.schema_version().await.expect("v2");
-    assert_eq!(v2, 1);
+    assert_eq!(v2, EXPECTED_SCHEMA_VERSION);
 
     // Explicit re-apply should be a no-op: the migration is
     // already in the ledger, so it appears in `skipped` and
     // nothing is added to `applied`.
     let result = store.apply_migrations().await.expect("re-apply");
-    assert_eq!(result.current_version, 1);
+    assert_eq!(result.current_version, EXPECTED_SCHEMA_VERSION);
     assert!(
         result.applied.is_empty(),
         "no new migrations should be applied on a no-op run"
     );
-    assert!(
-        result.skipped.contains(&1),
-        "migration 1 should be in the skipped list"
-    );
+    let expected_skipped: Vec<u32> =
+        (1..=EXPECTED_SCHEMA_VERSION).collect();
+    let skipped: std::collections::HashSet<u32> =
+        result.skipped.iter().copied().collect();
+    for v in &expected_skipped {
+        assert!(
+            skipped.contains(v),
+            "migration {v} should be in the skipped list"
+        );
+    }
 }
 
 #[tokio::test]
 async fn embedded_ping_succeeds_after_migration() {
+    let unique = format!("engram_test_{}", uuid::Uuid::new_v4().simple());
     let config = MemoryStoreConfig::new(
         "0.1.0-test",
-        "engram_test",
+        unique,
         "main",
         manifest_path(),
         StoreKind::Embedded { path: None },
@@ -97,9 +114,10 @@ async fn embedded_ping_succeeds_after_migration() {
 
 #[tokio::test]
 async fn clear_data_does_not_drop_ledger() {
+    let unique = format!("engram_test_{}", uuid::Uuid::new_v4().simple());
     let config = MemoryStoreConfig::new(
         "0.1.0-test",
-        "engram_test",
+        unique,
         "main",
         manifest_path(),
         StoreKind::Embedded { path: None },
@@ -109,7 +127,7 @@ async fn clear_data_does_not_drop_ledger() {
     // The schema_version call should still work because the
     // ledger is preserved across `clear_data`.
     let v = store.schema_version().await.expect("schema_version after clear");
-    assert_eq!(v, 1);
+    assert_eq!(v, EXPECTED_SCHEMA_VERSION);
 }
 
 #[tokio::test]
@@ -129,9 +147,10 @@ description = "This file is intentionally missing."
     let manifest_path = dir.path().join("manifest.toml");
     std::fs::write(&manifest_path, manifest_text).expect("write manifest");
     // No migrations dir created on purpose.
+    let unique = format!("engram_test_{}", uuid::Uuid::new_v4().simple());
     let config = MemoryStoreConfig::new(
         "0.1.0-test",
-        "engram_test",
+        unique,
         "main",
         manifest_path,
         StoreKind::Embedded { path: None },

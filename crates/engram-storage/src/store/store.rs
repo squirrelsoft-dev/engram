@@ -20,8 +20,68 @@ use async_trait::async_trait;
 
 use crate::error::{Error, MigrationResult};
 use crate::record::{
-    Concept, Entity, Episode, GraphResult, Procedure, Task,
+    Concept, Entity, Episode, GraphResult, Preference, Procedure, Task,
 };
+
+/// Filters for [`MemoryStore::traverse_graph`].
+///
+/// The Phase 1 surface accepts a list of relation types and an
+/// agent-scoping string. Future revisions may add edge weight
+/// bounds and node-type predicates; the struct is non-exhaustive
+/// so additional fields can be added without breaking the public
+/// API.
+#[derive(Debug, Clone, Default)]
+#[non_exhaustive]
+pub struct GraphFilters {
+    /// Restrict the walk to a specific agent. Cross-agent
+    /// traversals are not supported; an empty string disables
+    /// the agent filter (only the start node's own agent's
+    /// graph is reachable, so this is mostly for tests that
+    /// need a global view).
+    pub agent_id: String,
+
+    /// Restrict the walk to a subset of relation tables (e.g.
+    /// `episode_relates_to_concept`). An empty list means
+    /// "walk all known relation types", which is the
+    /// documented Phase 1 default.
+    pub relations: Vec<String>,
+
+    /// Optional cap on the number of edges returned. The
+    /// underlying engine still walks the full depth; this is
+    /// a post-filter.
+    pub max_edges: Option<u32>,
+}
+
+impl GraphFilters {
+    /// A filter that lets the walk proceed without constraints.
+    pub fn any() -> Self {
+        Self::default()
+    }
+
+    /// A filter that constrains the walk to a specific agent.
+    pub fn for_agent(agent_id: impl Into<String>) -> Self {
+        Self {
+            agent_id: agent_id.into(),
+            ..Self::default()
+        }
+    }
+
+    /// A filter that constrains the walk to a specific set of
+    /// relation types.
+    pub fn relations(rs: &[&str]) -> Self {
+        Self {
+            relations: rs.iter().map(|s| s.to_string()).collect(),
+            ..Self::default()
+        }
+    }
+
+    /// Set the maximum number of edges the walk should return.
+    /// Returns the modified filter so calls can be chained.
+    pub fn with_max_edges(mut self, max_edges: u32) -> Self {
+        self.max_edges = Some(max_edges);
+        self
+    }
+}
 
 /// A common supertrait for both adapter shapes. The async-trait
 /// macro gives us dyn-safety so the embedded and service stores can
@@ -70,6 +130,27 @@ pub trait MemoryStore: Send + Sync {
         agent_id: &str,
         limit: u32,
     ) -> Result<Vec<Episode>, Error>;
+
+    /// Read a single episode as it existed at a past transaction
+    /// time. The bi-temporal contract is documented in
+    /// `docs/design/schema-migrations.md` §5.5: the engine
+    /// records a new version on every update, and the `VERSION
+    /// d'...'` clause is the only read path that returns a
+    /// historical snapshot.
+    ///
+    /// `as_of` is the transaction-time wall clock, in UTC. The
+    /// underlying engine (SurrealDB's MVCC layer) is responsible
+    /// for resolving the version; the adapter just shapes the
+    /// query.
+    ///
+    /// Returns `Ok(None)` if the record did not exist at that
+    /// time (e.g. the caller's timestamp predates the `CREATE`).
+    async fn read_episode_at(
+        &self,
+        episode_id: &str,
+        as_of: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Option<Episode>, Error>;
+
     async fn query_semantic(
         &self,
         agent_id: &str,
@@ -83,6 +164,14 @@ pub trait MemoryStore: Send + Sync {
         candidates: &[Entity],
     ) -> Result<Vec<Entity>, Error>;
     async fn upsert_concept(&self, concept: &Concept) -> Result<Concept, Error>;
+    async fn write_preference(&self, preference: &Preference) -> Result<Preference, Error>;
+    async fn query_preferences(
+        &self,
+        agent_id: &str,
+        user_id: Option<&str>,
+        category: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<Preference>, Error>;
     async fn relate_nodes(
         &self,
         from: &str,
@@ -94,6 +183,7 @@ pub trait MemoryStore: Send + Sync {
         &self,
         start: &str,
         depth: u32,
+        filters: &GraphFilters,
     ) -> Result<Vec<GraphResult>, Error>;
     async fn write_task(&self, task: &Task) -> Result<Task, Error>;
     async fn query_pending(

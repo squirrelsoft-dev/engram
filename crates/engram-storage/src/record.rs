@@ -17,7 +17,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use surrealdb::types::{SurrealValue, Value};
+use surrealdb::types::{RecordId, SurrealValue, Value};
 
 /// Source-signal tier per README §5.2.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -59,7 +59,7 @@ impl TryFrom<u8> for SignalTier {
 /// A single episodic record. README §4.2.
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
 pub struct Episode {
-    pub id: Option<String>,
+    pub id: Option<RecordId>,
     pub agent_id: String,
     pub org_id: Option<String>,
     pub user_id: Option<String>,
@@ -81,7 +81,7 @@ pub struct Episode {
 /// A resolved entity record. README §4.2.
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
 pub struct Entity {
-    pub id: Option<String>,
+    pub id: Option<RecordId>,
     pub agent_id: String,
     pub org_id: Option<String>,
     pub canonical_name: String,
@@ -90,7 +90,7 @@ pub struct Entity {
     pub attributes: serde_json::Value,
     pub confidence: f32,
     pub confidence_tier: SignalTier,
-    pub anchor_record: Option<String>,
+    pub anchor_record: Option<RecordId>,
     pub created_at: Option<DateTime<Utc>>,
     pub last_updated: Option<DateTime<Utc>>,
     pub disambiguation_log: Option<Vec<serde_json::Value>>,
@@ -99,7 +99,7 @@ pub struct Entity {
 /// A semantic fact record. README §4.2.
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
 pub struct Concept {
-    pub id: Option<String>,
+    pub id: Option<RecordId>,
     pub agent_id: String,
     pub org_id: Option<String>,
     pub content: String,
@@ -119,7 +119,7 @@ pub struct Concept {
 /// A user-preference record. README §4.2.
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
 pub struct Preference {
-    pub id: Option<String>,
+    pub id: Option<RecordId>,
     pub agent_id: String,
     pub org_id: Option<String>,
     pub user_id: Option<String>,
@@ -146,7 +146,7 @@ pub enum PreferenceDirection {
 /// A procedure record. README §4.2.
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
 pub struct Procedure {
-    pub id: Option<String>,
+    pub id: Option<RecordId>,
     pub agent_id: String,
     pub org_id: Option<String>,
     pub name: String,
@@ -162,7 +162,7 @@ pub struct Procedure {
 /// A prospective-memory record. README §4.2.
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
 pub struct Task {
-    pub id: Option<String>,
+    pub id: Option<RecordId>,
     pub agent_id: String,
     pub org_id: Option<String>,
     pub user_id: Option<String>,
