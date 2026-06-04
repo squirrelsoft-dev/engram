@@ -1141,6 +1141,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "engram-storage",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "engram-storage"
 version = "0.1.0"
 dependencies = [

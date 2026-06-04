@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/engram-storage",
+    "crates/engram-core",
     "crates/engram",
 ]
 # The schema-migration parity spike (spikes/schema-migrations) is

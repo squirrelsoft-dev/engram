@@ -67,7 +67,13 @@ pub struct Episode {
     pub content_type: String,
     pub embedding: Option<Vec<f32>>,
     pub importance: f32,
-    pub entities: Option<Vec<String>>,
+    /// The entity records this episode mentions. Typed as
+    /// `Vec<RecordId>` so the SurrealDB bind path sends
+    /// typed record references (the schema declares this
+    /// column as `option<array<record<entity>>>`; a
+    /// `Vec<String>` is rejected by the engine's coercion
+    /// check with "Expected none | array<record<entity>>").
+    pub entities: Option<Vec<RecordId>>,
     pub valid_time_start: DateTime<Utc>,
     pub valid_time_end: Option<DateTime<Utc>>,
     pub transaction_time: Option<DateTime<Utc>>,

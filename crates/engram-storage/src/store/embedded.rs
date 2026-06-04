@@ -920,6 +920,13 @@ pub fn episode_to_map(e: &Episode) -> Result<Object, Error> {
     }
     m.insert("importance", e.importance);
     if let Some(ents) = &e.entities {
+        // Send as `Vec<RecordId>` so the bind path produces
+        // typed record references; the schema's
+        // `option<array<record<entity>>>` rejects a string
+        // list (the engine's coercion check returns
+        // "Expected none | array<record<entity>>"). The
+        // record-id values are already typed `RecordId` on
+        // the struct, so this is just a typed pass-through.
         m.insert("entities", ents.clone());
     }
     m.insert("valid_time_start", Datetime::from(e.valid_time_start));
@@ -957,6 +964,25 @@ pub fn entity_to_map(e: &Entity) -> Result<Object, Error> {
     if let Some(log) = &e.disambiguation_log {
         m.insert("disambiguation_log", log.clone());
     }
+    // `created_at` and `last_updated` are `datetime` (not
+    // `option<datetime>`) per the schema. Sending the
+    // CONTENT map without these fields is rejected by the
+    // engine on UPSERT with "Expected `datetime` but found
+    // `NONE`" — the engine doesn't fall back to the
+    // `DEFAULT` clause when the field is missing from the
+    // payload, because it interprets a missing payload
+    // field as "no value" (None), and the schema rejects
+    // None for a non-optional field. We always send both
+    // fields, defaulting to "now" when the caller hasn't
+    // populated them. (For a fresh INSERT, this is
+    // semantically the same as the `DEFAULT` clause. For
+    // an UPSERT update, this preserves the existing value
+    // because the caller-supplied value comes from a
+    // read-back.)
+    let now = chrono::Utc::now();
+    let created_at = e.created_at.unwrap_or(now);
+    m.insert("created_at", Datetime::from(created_at));
+    m.insert("last_updated", Datetime::from(e.last_updated.unwrap_or(now)));
     Ok(m)
 }
 

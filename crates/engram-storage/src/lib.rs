@@ -71,3 +71,4 @@ pub use store::{
     ServiceStore, StoreKind,
 };
 pub use store::format_record_id_key;
+pub use surrealdb::types::RecordId;
