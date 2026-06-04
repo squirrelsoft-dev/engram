@@ -11,6 +11,12 @@
 //! type-checker can catch missing required values. The
 //! `metadata` object in the README is a *logical* grouping; the
 //! Rust surface keeps each field at the top level for clarity.
+//!
+//! The `RecallRequest` is the input to the retrieval
+//! orchestrator's `recall()` (issue #5) and corresponds to
+//! `recall(query, filters?)` in README §7.2. The orchestrator
+//! reads the query, classifies it, and dispatches to the
+//! appropriate memory layers per the filters.
 
 use chrono::{DateTime, Utc};
 
@@ -247,6 +253,177 @@ impl StoreRequest {
     }
 }
 
+// ============================================================================
+// RecallRequest
+// ============================================================================
+
+/// The input to a `recall()` call. Mirrors the README §7.2
+/// `recall(query, filters?)` shape.
+///
+/// The `query` is the natural-language question the agent is
+/// asking its memory. The filters restrict which layers are
+/// consulted, which time range is searched, which entities are
+/// involved, which user scope is read, and the per-layer cap.
+/// All filters are optional; an empty filter set means "all
+/// layers, all time, all entities, all users, default cap".
+#[derive(Debug, Clone)]
+pub struct RecallRequest {
+    /// The agent that owns this recall. Maps to
+    /// `episode.agent_id` and the multi-tenant scoping rule
+    /// in README §9.1. Required.
+    pub agent_id: String,
+
+    /// The org scope (optional). Maps to `episode.org_id`.
+    pub org_id: Option<String>,
+
+    /// The user scope (optional). Maps to `episode.user_id`
+    /// and to the `preference.user_id` filter on the
+    /// preference layer.
+    pub user_id: Option<String>,
+
+    /// The natural-language query. Drives the query
+    /// classification step (which layers to consult) and the
+    /// per-layer retrieval (vector search, trigger pattern
+    /// matching, etc.). Must be non-empty.
+    pub query: String,
+
+    /// Restrict the search to a subset of memory layers.
+    /// When empty, the orchestrator runs the classifier and
+    /// dispatches to every layer the classifier selects
+    /// (the classifier's default with no keyword match is
+    /// "all five layers", per the README §6.2 step 1
+    /// behaviour of running all layers when classification
+    /// is uncertain).
+    pub types: Vec<crate::response::SourceLayer>,
+
+    /// Valid-time bounds for episodic and semantic results.
+    /// When `Some`, the orchestrator applies
+    /// `valid_time_start >= range.start` and
+    /// `valid_time_end <= range.end` (or `IS NULL`) to the
+    /// query. Episodic / semantic records outside the range
+    /// are not returned.
+    pub time_range: Option<TimeRange>,
+
+    /// Restrict the search to episodes that mention any of
+    /// these entity names (case-insensitive canonical-name
+    /// match on the entity records the episode links to).
+    /// Empty list disables the filter.
+    pub entities: Vec<String>,
+
+    /// Per-layer result cap. Defaults to 10 when the caller
+    /// doesn't supply one. The orchestrator never returns
+    /// more than this from any single layer; the merge step
+    /// may return up to `max_results × n_active_layers` rows
+    /// before its own cap kicks in (the merge cap is
+    /// `max_results` to match the README §7.2 semantics).
+    pub max_results: u32,
+}
+
+/// A half-open valid-time range. `start` is inclusive,
+/// `end` is exclusive. Matches the bi-temporal contract
+/// documented in `docs/design/schema-migrations.md` §5.5.
+#[derive(Debug, Clone, Copy)]
+pub struct TimeRange {
+    pub start: chrono::DateTime<chrono::Utc>,
+    pub end: chrono::DateTime<chrono::Utc>,
+}
+
+impl RecallRequest {
+    /// Build a request with the minimum required fields.
+    /// Optional filters are added via the `with_*` builders
+    /// or by direct field assignment.
+    pub fn new(agent_id: impl Into<String>, query: impl Into<String>) -> Self {
+        Self {
+            agent_id: agent_id.into(),
+            org_id: None,
+            user_id: None,
+            query: query.into(),
+            types: Vec::new(),
+            time_range: None,
+            entities: Vec::new(),
+            max_results: 10,
+        }
+    }
+
+    /// Set the org id.
+    pub fn with_org_id(mut self, org_id: impl Into<String>) -> Self {
+        self.org_id = Some(org_id.into());
+        self
+    }
+
+    /// Set the user id.
+    pub fn with_user_id(mut self, user_id: impl Into<String>) -> Self {
+        self.user_id = Some(user_id.into());
+        self
+    }
+
+    /// Restrict the orchestrator to a specific subset of
+    /// memory layers. An empty list means "let the
+    /// classifier decide" (the default).
+    pub fn with_types(
+        mut self,
+        types: Vec<crate::response::SourceLayer>,
+    ) -> Self {
+        self.types = types;
+        self
+    }
+
+    /// Apply a valid-time bound to the search. Episodic and
+    /// semantic results outside the range are filtered out.
+    pub fn with_time_range(
+        mut self,
+        start: chrono::DateTime<chrono::Utc>,
+        end: chrono::DateTime<chrono::Utc>,
+    ) -> Self {
+        self.time_range = Some(TimeRange { start, end });
+        self
+    }
+
+    /// Restrict the search to episodes that mention one of
+    /// the given entity names. The match is case-insensitive
+    /// on the entity's `canonical_name`.
+    pub fn with_entities(
+        mut self,
+        entities: Vec<String>,
+    ) -> Self {
+        self.entities = entities;
+        self
+    }
+
+    /// Override the per-layer result cap. The merge step
+    /// uses this same value as its own cap.
+    pub fn with_max_results(mut self, max_results: u32) -> Self {
+        self.max_results = max_results;
+        self
+    }
+
+    /// Validate the request. Returns `Ok(())` when the
+    /// required fields are present and the time range (if
+    /// any) is well-formed.
+    pub fn validate(&self) -> IngestResult<()> {
+        if self.agent_id.trim().is_empty() {
+            return Err(IngestError::Invalid("agent_id is required".to_string()));
+        }
+        if self.query.trim().is_empty() {
+            return Err(IngestError::Invalid("query is required".to_string()));
+        }
+        if let Some(r) = self.time_range {
+            if r.end < r.start {
+                return Err(IngestError::TimeRange(format!(
+                    "time_range end ({}) is before start ({})",
+                    r.end, r.start
+                )));
+            }
+        }
+        if self.max_results == 0 {
+            return Err(IngestError::Invalid(
+                "max_results must be > 0".to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -317,6 +494,39 @@ mod tests {
     #[test]
     fn request_rejects_out_of_range_importance() {
         let r = StoreRequest::new("agent-1", "hi").with_importance(1.5);
+        assert!(r.validate().is_err());
+    }
+
+    // --- RecallRequest validation --------------------------------------
+
+    #[test]
+    fn recall_request_validates_minimum() {
+        let r = RecallRequest::new("agent-1", "what happened with Sarah?");
+        r.validate().expect("valid request");
+    }
+
+    #[test]
+    fn recall_request_rejects_empty_agent() {
+        let r = RecallRequest::new("", "hello");
+        assert!(r.validate().is_err());
+    }
+
+    #[test]
+    fn recall_request_rejects_empty_query() {
+        let r = RecallRequest::new("agent-1", "   ");
+        assert!(r.validate().is_err());
+    }
+
+    #[test]
+    fn recall_request_rejects_zero_max_results() {
+        let r = RecallRequest::new("agent-1", "hi").with_max_results(0);
+        assert!(r.validate().is_err());
+    }
+
+    #[test]
+    fn recall_request_rejects_inverted_time_range() {
+        let r = RecallRequest::new("agent-1", "hi")
+            .with_time_range(Utc::now(), Utc::now() - chrono::Duration::days(1));
         assert!(r.validate().is_err());
     }
 }
